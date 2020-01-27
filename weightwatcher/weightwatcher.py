@@ -19,11 +19,13 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import powerlaw
-        
+
+import tensorflow
 import tensorflow as tf
-from tensorflow import keras
+#from tensorflow import keras
 import keras
-from keras.models import load_model
+#from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model
 import pandas as pd
 from .RMT_Util import *
 #from RMT_Util import *
@@ -82,7 +84,7 @@ class WeightWatcher:
         versions  = "\npython      version {}".format(sys.version)
         versions += "\nnumpy       version {}".format(np.__version__)
         versions += "\ntensforflow version {}".format(tf.__version__)
-        versions += "\nkeras       version {}".format(keras.__version__)
+        versions += "\nkeras       version {}".format(tensorflow.keras.__version__)
         return "\n{}{}".format(self.header(), versions)
 
 
@@ -151,7 +153,7 @@ class WeightWatcher:
         glorot_fix:
             Adjust the norm for the Glorot Normalization
         alphas:
-            Compute the power laws (alpha) of the weight matrices. 
+            Compute the power laws (alpha) of the weight matrices.
             Time consuming so disabled by default (use lognorm if you want speed)
         lognorms:
             Compute the log norms of the weight matrices.
@@ -163,7 +165,7 @@ class WeightWatcher:
             Compute the best Marchenko-Pastur fit of each weight matrix ESD
         """
 
-        model = model or self.model        
+        model = model or self.model
         res = {}
 
         # Treats Custom Conv1D / Attention Layers (ex: GPT, BERT)
@@ -201,7 +203,7 @@ class WeightWatcher:
             self.info("Analyzing model")
 
         weights = []
-        
+
         layers = []
         if hasattr(model, 'layers'):
             # keras
@@ -209,14 +211,14 @@ class WeightWatcher:
         else:
             # pyTorch
             layers = model.modules()
-            
+
         import torch.nn as nn
 
         for i, l in enumerate(layers):
             self.debug("Layer {}: {}".format(i+1, l))
             res[i] = {"id": i}
             res[i]["type"] = l
-            
+
             weights = []
 
             # Filter out layers by numerical id (if any provided)
@@ -227,7 +229,7 @@ class WeightWatcher:
                 continue
 
             # DENSE layer (Keras) / LINEAR (pytorch)
-            if isinstance(l, keras.layers.core.Dense) or isinstance(l, nn.Linear):
+            if isinstance(l, tensorflow.keras.layers.Dense) or isinstance(l, nn.Linear):
 
                 res[i]["layer_type"] = LAYER_TYPE.DENSE
 
@@ -238,7 +240,7 @@ class WeightWatcher:
                     self.debug("Layer {}: {}".format(i+1, msg))
                     res[i]["message"] = msg
                     continue
-                
+
                 if isinstance(l, nn.Linear):
                     # pyTorch
                     weights = [np.array(l.weight.data.clone().cpu())]
@@ -247,7 +249,7 @@ class WeightWatcher:
                     # keras
                     weights = l.get_weights()[0:1] # keep only the weights and not the bias
 #                    weights = l.get_weights()[0:1]  #Keras default Glorot uniform
-                    
+
                     # TODO: add option to append bias matrix
                     #if add_bias:
                     #    weights = weigths[0]+weights[1]
@@ -277,8 +279,8 @@ class WeightWatcher:
                     self.debug("Layer {}: {}".format(i+1, msg))
                     res[i]["message"] = msg
                     continue
-            
-            elif (isinstance(l, keras.layers.convolutional.Conv1D)):                
+
+            elif (isinstance(l, tensorflow.keras.layers.Conv1D)):
                 res[i] = {"layer_type": LAYER_TYPE.CONV1D}
 
                 if (len(layer_types) > 0 and
@@ -287,17 +289,17 @@ class WeightWatcher:
                     self.debug("Layer {}: {}".format(i+1, msg))
                     res[i]["message"] = msg
                     continue
-                
+
                 weights = l.get_weights()[0:1] # keep only the weights and not the bias
-                
+
                 if weights[0].shape[1] < 2:
                     msg = "Skipping (Found array with 1 feature(s) while a minimum of 2 is required)"
                     self.debug("Layer {}: {}".format(i+1, msg))
                     res[i]["message"] = msg
                     continue
-                
+
             # CONV2D layer
-            elif isinstance(l, keras.layers.convolutional.Conv2D) or isinstance(l, nn.Conv2d):
+            elif isinstance(l, tensorflow.keras.layers.Conv2D) or isinstance(l, nn.Conv2d):
 
                 res[i] = {"layer_type": LAYER_TYPE.CONV2D}
 
@@ -307,21 +309,21 @@ class WeightWatcher:
                     self.debug("Layer {}: {}".format(i+1, msg))
                     res[i]["message"] = msg
                     continue
-                
+
                 if isinstance(l, nn.Conv2d):
                     w = [np.array(l.weight.data.clone().cpu())]
                     receptive_field_size = l.weight.data[0][0].numel()
                 else:
                     w = l.get_weights()
-                    
+
                 weights = self.get_conv2D_Wmats(w[0])
-                
+
                 if weights[0].shape[1] < 2:
                     msg = "Skipping (Found array with 1 feature(s) while a minimum of 2 is required)"
                     self.debug("Layer {}: {}".format(i+1, msg))
                     res[i]["message"] = msg
                     continue
-                
+
             else:
                 msg = "Skipping (Layer not supported)"
                 self.debug("Layer {}: {}".format(i+1, msg))
@@ -343,14 +345,14 @@ class WeightWatcher:
                 res["message"] = msg
             else:
                 res[i] = {**res[i], **results}
-                
+
         self.results = res
-        
+
         self.print_results(results=res)
 
         return res
-    
-    
+
+
     def print_results(self, results=None):
         self.compute_details(results=results)
 
@@ -367,7 +369,7 @@ class WeightWatcher:
         Return a pandas dataframe
         """
         import numpy as np
-        
+
         if results is None:
             results = self.results
 
@@ -409,7 +411,7 @@ class WeightWatcher:
             metrics_stats.append("{}_compound_max".format(metric))
             metrics_stats.append("{}_compound_avg".format(metric))
 
-        columns = ["layer_id", "layer_type", "N", "M", "layer_count", "slice", 
+        columns = ["layer_id", "layer_type", "N", "M", "layer_count", "slice",
                    "slice_count", "level", "comment"] + [*metrics] + metrics_stats
         df = pd.DataFrame(columns=columns)
 
@@ -514,7 +516,7 @@ class WeightWatcher:
 
         return df.dropna(axis=1,how='all')
 
-    
+
     def get_summary(self, pandas=False):
         if pandas:
             return pd.DataFrame(data=self.summary, index=[0])
@@ -523,16 +525,16 @@ class WeightWatcher:
 
 
     def get_conv2D_Wmats(self, Wtensor):
-        """Extract W slices from a 4 index conv2D tensor of shape: (N,M,i,j) or (M,N,i,j).  
+        """Extract W slices from a 4 index conv2D tensor of shape: (N,M,i,j) or (M,N,i,j).
         Return ij (N x M) matrices
-        
+
         """
         Wmats = []
         s = Wtensor.shape
         N, M, imax, jmax = s[0],s[1],s[2],s[3]
         if N + M >= imax + jmax:
             self.debug("Pytorch tensor shape detected: {}x{} (NxM), {}x{} (i,j)".format(N, M, imax, jmax))
-            
+
             for i in range(imax):
                 for j in range(jmax):
                     W = Wtensor[:,:,i,j]
@@ -540,16 +542,16 @@ class WeightWatcher:
                         W = W.T
                     Wmats.append(W)
         else:
-            N, M, imax, jmax = imax, jmax, N, M          
+            N, M, imax, jmax = imax, jmax, N, M
             self.debug("Keras tensor shape detected: {}x{} (NxM), {}x{} (i,j)".format(N, M, imax, jmax))
-            
+
             for i in range(imax):
                 for j in range(jmax):
                     W = Wtensor[i,j,:,:]
                     if N < M:
                         W = W.T
                     Wmats.append(W)
-            
+
         return Wmats
 
 
@@ -563,7 +565,7 @@ class WeightWatcher:
 
         kappa = np.sqrt( 2 / ((N + M)*rf_size) )
         W = W/kappa
-        return W 
+        return W
 
     def pytorch_norm_fix(self, W, N, M, rf_size):
         """Apply pytorch Channel Normalization Fix
@@ -573,10 +575,10 @@ class WeightWatcher:
 
         kappa = np.sqrt( 2/(N*rf_size) )
         W = W/kappa
-        return W 
+        return W
 
 
-    def glorot_norm_check(self, W, N, M, rf_size, 
+    def glorot_norm_check(self, W, N, M, rf_size,
                    lower = 0.5, upper = 1.5):
         """Check if this layer needs Glorot Normalization Fix"""
 
@@ -585,23 +587,23 @@ class WeightWatcher:
 
         check1 = norm / np.sqrt(N*M)
         check2 = norm / (kappa*np.sqrt(N*M))
-        
-        if (rf_size > 1) and (check2 > lower) and (check2 < upper):   
+
+        if (rf_size > 1) and (check2 > lower) and (check2 < upper):
             return check2, True
-        elif (check1 > lower) & (check1 < upper): 
+        elif (check1 > lower) & (check1 < upper):
             return check1, True
         else:
             if rf_size > 1:
                 return check2, False
             else:
                 return check1, False
-    
+
 
     def analyze_weights(self, weights, layerid, min_size, max_size,
-                        alphas, lognorms, spectralnorms, softranks,  
+                        alphas, lognorms, spectralnorms, softranks,
                         normalize, glorot_fix, plot, mp_fit):
         """Analyzes weight matrices.
-        
+
         Example in Keras:
             weights = layer.get_weights()
             analyze_weights(weights)
@@ -624,7 +626,7 @@ class WeightWatcher:
             res[i]["Q"] = Q
             lambda0 = None
 
-            check, checkTF = self.glorot_norm_check(W, N, M, count) 
+            check, checkTF = self.glorot_norm_check(W, N, M, count)
             res[i]['check'] = check
             res[i]['checkTF'] = checkTF
             # assume receptive field size is count
@@ -632,11 +634,11 @@ class WeightWatcher:
                 W = self.glorot_norm_fix(W, N, M, count)
             else:
                 # probably never needed since we always fix for glorot
-                W = W * np.sqrt(count/2.0) 
+                W = W * np.sqrt(count/2.0)
 
 
             if spectralnorms: #spectralnorm is the max eigenvalues
-                
+
                 svd = TruncatedSVD(n_components=1, n_iter=7, random_state=10)
                 svd.fit(W)
                 sv = svd.singular_values_
@@ -651,31 +653,31 @@ class WeightWatcher:
 
             if M < min_size:
                 summary = "Weight matrix {}/{} ({},{}): Skipping: too small (<{})".format(i+1, count, M, N, min_size)
-                res[i]["summary"] = summary 
+                res[i]["summary"] = summary
                 self.debug("    {}".format(summary))
                 continue
 
             if max_size > 0 and M > max_size:
                 summary = "Weight matrix {}/{} ({},{}): Skipping: too big (testing) (>{})".format(i+1, count, M, N, max_size)
-                res[i]["summary"] = summary 
+                res[i]["summary"] = summary
                 self.info("    {}".format(summary))
                 continue
 
             summary = []
-                
+
             self.debug("    Weight matrix {}/{} ({},{}): Analyzing ..."
                      .format(i+1, count, M, N))
-            
+
             if alphas:
 
                 svd = TruncatedSVD(n_components=M-1, n_iter=7, random_state=10)
-                
+
                 try:
-                    svd.fit(W) 
+                    svd.fit(W)
                 except:
                     W = W.astype(float)
                     svd.fit(W)
-                    
+
                 sv = svd.singular_values_
                 sv_max = np.max(sv)
                 evals = sv*sv
@@ -689,7 +691,7 @@ class WeightWatcher:
 
                 lambda_max = np.max(evals)
                 fit = powerlaw.Fit(evals, xmax=lambda_max, verbose=False)
-                alpha = fit.alpha 
+                alpha = fit.alpha
                 res[i]["alpha"] = alpha
                 D = fit.D
                 res[i]["D"] = D
@@ -699,7 +701,7 @@ class WeightWatcher:
                 res[i]["alpha_weighted"] = alpha_weighted
                 tolerance = lambda_max * M * np.finfo(np.max(sv)).eps
                 res[i]["rank_loss"] = np.count_nonzero(sv > tolerance, axis=-1)
-                
+
                 logpnorm = np.log10(np.sum([ev**alpha for ev in evals]))
                 res[i]["logpnorm"] = logpnorm
 
@@ -715,20 +717,20 @@ class WeightWatcher:
                     fit.plot_ccdf(color='r', linewidth=2, ax=fig2)
                     fit.power_law.plot_ccdf(color='r', linestyle='--', ax=fig2)
 #                    plt.title("Power law fit for Weight matrix {}/{} (layer ID: {})".format(i+1, count, layerid))
-                    plt.title("Power law fit for Weight matrix {}/{} (layer ID: {})\n".format(i+1, count, layerid) + r"$\alpha$={0:.3f}; ".format(alpha) + r"KS_distance={0:.3f}".format(D))                    
+                    plt.title("Power law fit for Weight matrix {}/{} (layer ID: {})\n".format(i+1, count, layerid) + r"$\alpha$={0:.3f}; ".format(alpha) + r"KS_distance={0:.3f}".format(D))
                     plt.show()
 
                     # plot eigenvalue histogram
                     plt.hist(evals, bins=100, density=True)
 #                    plt.title(r"ESD (Empirical Spectral Density) $\rho(\lambda)$" + " for Weight matrix {}/{} (layer ID: {})".format(i+1, count, layerid))
-                    plt.title(r"ESD (Empirical Spectral Density) $\rho(\lambda)$" + "\nfor Weight matrix ({}x{}) {}/{} (layer ID: {})".format(N, M, i+1, count, layerid))                    
+                    plt.title(r"ESD (Empirical Spectral Density) $\rho(\lambda)$" + "\nfor Weight matrix ({}x{}) {}/{} (layer ID: {})".format(N, M, i+1, count, layerid))
                     plt.show()
 
                     plt.loglog(evals)
 #                    plt.title("Eigen Values for Weight matrix {}/{} (layer ID: {})".format(i+1, count, layerid))
                     plt.title("Logscaling Plot of Eigenvalues\nfor Weight matrix ({}X{}) {}/{} (layer ID: {})".format(N, M, i+1, count, layerid))
                     plt.show()
-                
+
             if mp_fit:
 #                if Q == 1:
 #                    ## Quarter-Circle Law
@@ -737,63 +739,63 @@ class WeightWatcher:
 #                else:
 #                    to_plot = sv*sv/N
 #                w_unnorm = W*np.sqrt(N + M)/np.sqrt(2*N)
-                
+
                 if not alphas:
                     #W = self.normalize(W, N, M, count)
                     svd = TruncatedSVD(n_components=M-1, n_iter=7, random_state=10)
-                    svd.fit(W) 
+                    svd.fit(W)
                     sv = svd.singular_values_
                     sv_max = np.max(sv)
                     evals = sv*sv
                     if normalize:
                         evals = evals/N
                     lambda_max = np.max(evals)
-                
+
                 to_plot = evals.copy()
-                
+
                 bw = 0.1
-#                s1, f1 = RMT_Util.fit_mp(to_plot, Q, bw = 0.01)  
-#                s1, f1 = fit_density(to_plot, Q, bw = bw)  
+#                s1, f1 = RMT_Util.fit_mp(to_plot, Q, bw = 0.01)
+#                s1, f1 = fit_density(to_plot, Q, bw = bw)
                 s1, f1 = fit_density_with_range(to_plot, Q, bw = bw)
-                
+
                 res[i]['sigma_mp'] = s1
-                
+
                 bulk_edge = (s1 * (1 + 1/np.sqrt(Q)))**2
-                
+
                 spikes = sum(to_plot > bulk_edge)
                 res[i]['numofSpikes'] = spikes
                 res[i]['ratio_numofSpikes'] = spikes / (M - 1)
-                
+
                 softrank_mp = bulk_edge / lambda_max
                 res[i]['softrank_mp'] = softrank_mp
-                
+
                 if plot:
-                    
+
                     if Q == 1:
                         fit_law = 'QC SSD'
-                        
+
                         #Even if the quarter circle applies, still plot the MP_fit
                         plot_density(to_plot, s1, Q, method = "MP")
                         plt.legend([r'$\rho_{emp}(\lambda)$', 'MP fit'])
                         plt.title("MP ESD, sigma auto-fit for Weight matrix {}/{} (layer ID: {})\nsigma_fit = {}, softrank_mp = {}".format(i+1, count, layerid, round(s1, 6), round(softrank_mp, 3)))
                         plt.show()
-                        
+
                     else:
                         fit_law = 'MP ESD'
-#                        RMT_Util.plot_ESD_and_fit(model=None, eigenvalues=to_plot, 
+#                        RMT_Util.plot_ESD_and_fit(model=None, eigenvalues=to_plot,
 #                                                  Q=Q, num_spikes=0, sigma=s1)
-                    plot_density_and_fit(model=None, eigenvalues=to_plot, 
+                    plot_density_and_fit(model=None, eigenvalues=to_plot,
                                          Q=Q, num_spikes=0, sigma=s1, verbose = False)
                     plt.title("{}, sigma auto-fit for Weight matrix {}/{} (layer ID: {})\nsigma_fit = {}, softrank_mp = {}".format(fit_law, i+1, count, layerid, round(s1, 6), round(softrank_mp, 3)))
                     plt.show()
-                        
+
             if lognorms:
                 norm = np.linalg.norm(W) #Frobenius Norm
                 res[i]["norm"] = norm
                 lognorm = np.log10(norm)
                 res[i]["lognorm"] = lognorm
 
-                X = np.dot(W.T,W)                
+                X = np.dot(W.T,W)
                 if normalize:
                     X = X/N
                 normX = np.linalg.norm(X) #Frobenius Norm
@@ -802,8 +804,8 @@ class WeightWatcher:
                 res[i]["lognormX"] = lognormX
 
                 summary.append("Weight matrix {}/{} ({},{}): LogNorm: {} ; LogNormX: {}".format(i+1, count, M, N, lognorm, lognormX))
-                
-                if softranks: 
+
+                if softranks:
                     softrank = norm**2 / sv_max**2
                     softranklog = np.log10(softrank)
                     softranklogratio = lognorm / np.log10(sv_max)
@@ -812,7 +814,7 @@ class WeightWatcher:
                     res[i]["softranklogratio"] = softranklogratio
                     summary += "{}. Softrank: {}. Softrank log: {}. Softrank log ratio: {}".format(summary, softrank, softranklog, softranklogratio)
 
-                        
+
 
             res[i]["summary"] = "\n".join(summary)
             for line in summary:
